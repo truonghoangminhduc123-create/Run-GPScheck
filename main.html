@@ -186,7 +186,7 @@
     // 1 độ vĩ độ (latitude) xấp xỉ 111,111 mét
     const METERS_PER_DEGREE_LAT = 111111.0; 
     // Phạm vi xem cố định tối thiểu (để thấy rõ đường đi ban đầu)
-    const FIXED_VIEW_METERS = 30; 
+    const FIXED_VIEW_METERS = 30; // KHUNG HÌNH CỐ ĐỊNH 30 MÉT (CHẾ ĐỘ PHÓNG TO)
     const STEP_METERS = 10;           // Bước nhảy scale: 10 mét
 
     // --- UTILITY UI FUNCTIONS ---
@@ -407,7 +407,7 @@
         let centerLat, centerLon;
         
         if (approxRangeMeters < FIXED_VIEW_METERS) {
-            // Khi đường đi quá ngắn (< 30m), sử dụng khung cố định 30m, căn giữa điểm cuối
+            // *** LOGIC PHÓNG TO ĐÃ ÁP DỤNG Ở ĐÂY: KHUNG CỐ ĐỊNH 30 MÉT ***
             targetRangeMeters = FIXED_VIEW_METERS;
             const lastPoint = pathPoints[pathPoints.length - 1];
             centerLat = lastPoint.lat;
@@ -511,7 +511,7 @@
 
         // Chỉ lưu điểm nếu:
         // 1. Là điểm đầu tiên
-        // 2. Hoặc đã di chuyển ít nhất 1 mét kể từ điểm cuối cùng (lọc nhiễu)
+        // 2. Hoặc đã di chuyển ít nhất 1 mét kể từ điểm cuối cùng (lọc nhiễu GPS)
         if (lastRecordedPoint === null || calculateDistance(lastRecordedPoint, newPoint) > 1) {
             pathPoints.push(newPoint);
         }
