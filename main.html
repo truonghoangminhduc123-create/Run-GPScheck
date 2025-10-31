@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theo Dõi Chạy Bộ Chuyên Nghiệp</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Thiết lập font Inter mặc định */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #e2e8f0; /* Màu nền xám xanh */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Điều chỉnh để nội dung không bị che trên di động */
+            min-height: 100vh;
+            padding: 24px;
+        }
+        .container {
+            max-width: 420px;
+            width: 100%;
+            background-color: white;
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+        input[type="number"] {
+            border: 1px solid #cbd5e1;
+            padding: 12px;
+            border-radius: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+        button {
+            transition: all 0.2s;
+        }
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+        .metric-card {
+            background-color: #f8fafc;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        #mapCanvas {
+            background-color: #e0f2f1; /* Nền canvas xanh nhạt */
+            border-radius: 8px;
+            width: 100%;
+            height: 300px; /* Chiều cao cố định, chiều rộng linh hoạt */
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#3b82f6',
+                        'success-green': '#10b981',
+                        'danger-red': '#ef4444',
+                        'text-dark': '#1e293b'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body>
+
+<div class="container flex flex-col items-center">
+    <h1 class="text-3xl font-bold text-text-dark mb-4">Theo Dõi Chạy Bộ GPS</h1>
+
+    <!-- Khu vực nhập liệu -->
+    <div id="input-area" class="w-full mb-6 p-4 bg-blue-50 rounded-lg">
+        <label for="distance-input" class="block text-sm font-semibold text-text-dark mb-2">
+            Mục tiêu (mét):
+        </label>
+        <input type="number" id="distance-input" placeholder="Ví dụ: 1000" value="1000">
+    </div>
+
+    <!-- MÀN HÌNH CHẠY THỜI GIAN THỰC -->
+    <div id="tracking-screen" class="w-full">
+        <!-- Tổng Quãng Đường & Thời Gian -->
+        <div class="flex justify-between items-center mb-4">
+            <div class="text-center">
+                <p class="text-sm font-medium text-gray-500">Đã đi</p>
+                <span id="distance-display" class="text-4xl font-extrabold text-success-green">0.00 m</span>
+            </div>
+            <div class="text-center">
+                <p class="text-sm font-medium text-gray-500">Thời gian</p>
+                <span id="time-display" class="text-4xl font-extrabold text-primary-blue">00:00:00</span>
+            </div>
+        </div>
+        
+        <!-- Khu vực Canvas Bản Đồ -->
+        <div class="mb-6 p-2 bg-gray-100 rounded-lg">
+            <h3 class="text-sm font-semibold text-gray-700 mb-2">Đường đi thực tế:</h3>
+            <canvas id="mapCanvas"></canvas>
+        </div>
+
+        <!-- Các chỉ số nhỏ hơn -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="metric-card">
+                <p class="text-xs font-medium text-gray-500 uppercase">Tốc độ chạy</p>
+                <span id="speed-display" class="text-xl font-bold text-text-dark">0.0 km/h</span>
+            </div>
+            <div class="metric-card">
+                <p class="text-xs font-medium text-gray-500 uppercase">Độ chính xác GPS (Sóng)</p>
+                <span id="accuracy-display" class="text-xl font-bold text-text-dark">Đang chờ...</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- KHU VỰC THỐNG KÊ (ẨN) -->
+    <div id="stats-area" class="w-full hidden mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+        <h3 class="text-lg font-bold text-success-green mb-3">KẾT QUẢ HOÀN THÀNH</h3>
+        <p class="text-sm text-gray-700">Tổng thời gian: <span id="final-time" class="font-bold text-text-dark"></span></p>
+        <p class="text-sm text-gray-700">Tốc độ TB: <span id="avg-speed" class="font-bold text-text-dark"></span></p>
+        <p class="text-sm text-gray-700">Quãng đường: <span id="final-distance" class="font-bold text-text-dark"></span></p>
+    </div>
+
+    <!-- Khu vực trạng thái GPS -->
+    <div id="status-message" class="w-full text-center p-3 mb-6 rounded-lg text-sm transition-all duration-300 bg-yellow-100 text-yellow-800">
+        Sẵn sàng. Nhập mục tiêu và nhấn "Bắt Đầu".
+    </div>
+    
+    <!-- Các nút hành động -->
+    <div class="w-full flex space-x-4">
+        <button id="start-btn" onclick="startTracking()" class="btn-primary w-full bg-primary-blue hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-lg shadow-blue-300/50">
+            BẮT ĐẦU CHẠY
+        </button>
+        <button id="stop-btn" onclick="stopTracking(false)" disabled class="btn-primary w-full bg-danger-red hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg shadow-lg shadow-red-300/50 opacity-50 cursor-not-allowed">
+            DỪNG
+        </button>
+    </div>
+</div>
+
+<!-- Modal và các hàm khác giữ nguyên... -->
+<div id="modal-success" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-lg shadow-2xl text-center max-w-sm w-full">
+        <svg class="mx-auto h-16 w-16 text-success-green" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <h3 class="text-2xl font-bold mt-3 text-gray-800">HOÀN THÀNH MỤC TIÊU!</h3>
+        <p class="text-gray-600 mt-2">Chúc mừng, bạn đã chạy được quãng đường mục tiêu.</p>
+        <button onclick="closeModal('modal-success')" class="mt-4 bg-success-green hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">
+            Xem kết quả
+        </button>
+    </div>
+</div>
+
+<div id="modal-error" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-lg shadow-2xl text-center max-w-sm w-full">
+        <svg class="mx-auto h-16 w-16 text-danger-red" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <h3 class="text-2xl font-bold mt-3 text-gray-800">LỖI!</h3>
+        <p id="error-text" class="text-gray-600 mt-2">Lỗi không xác định.</p>
+        <button onclick="closeModal('modal-error')" class="mt-4 bg-danger-red hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">
+            Đóng
+        </button>
+    </div>
+</div>
+
+<script>
+    // --- GLOBAL VARIABLES ---
+    let watchId = null; 
+    let wakeLock = null; 
+    let totalDistance = 0; // meters
+    let targetDistance = 0; // meters
+    let lastPosition = null; 
+    let lastTimestamp = null; 
+    let isTracking = false;
+    let startTime = 0; 
+    let timerInterval = null; 
+    
+    // VARIABLES FOR MAP DRAWING
+    let pathPoints = []; // [{ lat: number, lon: number }]
+    let mapCanvas, mapCtx;
+    const MAP_PADDING = 20; // Padding inside the canvas
+
+    // HẰNG SỐ CHO LOGIC SCALE
+    // 1 độ vĩ độ (latitude) xấp xỉ 111,111 mét
+    const METERS_PER_DEGREE_LAT = 111111.0; 
+    // Phạm vi xem cố định tối thiểu (để thấy rõ đường đi ban đầu)
+    const FIXED_VIEW_METERS = 30; 
+    const STEP_METERS = 10;           // Bước nhảy scale: 10 mét
+
+    // --- UTILITY UI FUNCTIONS ---
+
+    function setupCanvas() {
+        mapCanvas = document.getElementById('mapCanvas');
+        mapCtx = mapCanvas.getContext('2d');
+        
+        // Cài đặt kích thước canvas dựa trên CSS width (100% của container)
+        const containerWidth = document.querySelector('.container').offsetWidth;
+        // Chiều rộng container (420px) trừ padding của container (24*2) trừ padding của map wrapper (2*2)
+        mapCanvas.width = containerWidth - (24 * 2) - (2 * 2); 
+        mapCanvas.height = 300; // Chiều cao cố định
+        
+        clearCanvas();
+        // Vẽ lại đường đi sau khi resize để thích ứng với kích thước mới
+        if (isTracking || pathPoints.length > 0) {
+            drawPath();
+        }
+    }
+    
+    function clearCanvas() {
+        if (mapCtx) {
+            mapCtx.fillStyle = '#e0f2f1'; // Giữ màu nền
+            mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+        }
+    }
+
+    function updateStatus(message, colorClass = 'bg-yellow-100 text-yellow-800') {
+        const statusEl = document.getElementById('status-message');
+        statusEl.className = `w-full text-center p-3 mb-6 rounded-lg text-sm transition-all duration-300 ${colorClass}`;
+        statusEl.textContent = message;
+    }
+
+    function formatTime(ms) {
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        
+        const pad = (num) => String(num).padStart(2, '0');
+        return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    }
+
+    function updateDistanceDisplay() {
+        // Hiển thị khoảng cách đã đi
+        document.getElementById('distance-display').textContent = 
+            `${totalDistance.toFixed(2)} m`;
+    }
+
+    function openModal(modalId, message = null) {
+        const modal = document.getElementById(modalId);
+        if (message && modalId === 'modal-error') {
+            document.getElementById('error-text').textContent = message;
+        }
+        modal.style.display = 'flex';
+    }
+
+    function closeModal(modalId) {
+        document.getElementById(modalId).style.display = 'none';
+        if (modalId === 'modal-success') {
+            // Khi đóng modal thành công, hiển thị thống kê
+            showFinalStats(true);
+        }
+    }
+
+    function updateButtons(running) {
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const input = document.getElementById('distance-input');
+
+        isTracking = running;
+
+        if (running) {
+            startBtn.disabled = true;
+            startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            stopBtn.disabled = false;
+            stopBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            input.disabled = true;
+        } else {
+            startBtn.disabled = false;
+            startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            stopBtn.disabled = true;
+            stopBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            input.disabled = false;
+        }
+    }
+
+    function showFinalStats(isFinished) {
+        const statsArea = document.getElementById('stats-area');
+        const inputArea = document.getElementById('input-area');
+        
+        if (isFinished) {
+            // Tính toán thời gian và tốc độ trung bình
+            const endTime = Date.now();
+            const totalTimeMs = endTime - startTime;
+            const totalSeconds = totalTimeMs / 1000;
+            const avgSpeedMps = totalSeconds > 0 ? totalDistance / totalSeconds : 0;
+            const avgSpeedKmh = avgSpeedMps * 3.6;
+
+            document.getElementById('final-time').textContent = formatTime(totalTimeMs);
+            document.getElementById('avg-speed').textContent = `${avgSpeedKmh.toFixed(2)} km/h`;
+            document.getElementById('final-distance').textContent = `${totalDistance.toFixed(2)} m`;
+
+            statsArea.classList.remove('hidden');
+            inputArea.classList.add('hidden'); // Ẩn input khi có kết quả
+            
+        } else {
+            statsArea.classList.add('hidden');
+            inputArea.classList.remove('hidden');
+        }
+    }
+
+    // --- DISTANCE CALCULATION (HAVERSINE) ---
+
+    /**
+     * Calculates distance between two GPS coordinates using the Haversine formula.
+     * Hỗ trợ cả định dạng { latitude, longitude } (từ GPS API) và { lat, lon } (từ pathPoints)
+     * @param {Object} pos1 
+     * @param {Object} pos2 
+     * @returns {number} Distance in meters
+     */
+    function calculateDistance(pos1, pos2) {
+        if (!pos1 || !pos2) return 0;
+        const R = 6371e3; 
+        
+        // Lấy tọa độ, ưu tiên 'latitude'/'longitude' (từ GPS API), nếu không có thì dùng 'lat'/'lon' (từ pathPoints)
+        const latA = pos1.latitude !== undefined ? pos1.latitude : pos1.lat;
+        const lonA = pos1.longitude !== undefined ? pos1.longitude : pos1.lon;
+        const latB = pos2.latitude !== undefined ? pos2.latitude : pos2.lat;
+        const lonB = pos2.longitude !== undefined ? pos2.longitude : pos2.lon;
+
+        const lat1 = latA * (Math.PI / 180);
+        const lat2 = latB * (Math.PI / 180);
+        const deltaLat = (latB - latA) * (Math.PI / 180);
+        const deltaLon = (lonB - lonA) * (Math.PI / 180);
+
+        const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                  Math.cos(lat1) * Math.cos(lat2) *
+                  Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return R * c; 
+    }
+    
+    // --- TIMER ---
+    function startTimer() {
+        if (timerInterval) clearInterval(timerInterval);
+        
+        timerInterval = setInterval(() => {
+            const elapsedTime = Date.now() - startTime;
+            document.getElementById('time-display').textContent = formatTime(elapsedTime);
+        }, 1000);
+    }
+
+    function stopTimer() {
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+    }
+
+    // --- WAKE LOCK ---
+    async function requestWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                updateStatus('Đang theo dõi. Màn hình sẽ luôn bật.', 'bg-success-100 text-success-green');
+            } catch (err) {
+                console.error('Không thể kích hoạt Wake Lock:', err);
+                updateStatus('Đang theo dõi. Lỗi: Không giữ được màn hình.', 'bg-red-100 text-danger-red');
+            }
+        } else {
+            updateStatus('Đang theo dõi. Lưu ý: Trình duyệt không hỗ trợ giữ màn hình.', 'bg-yellow-100 text-yellow-800');
+        }
+    }
+
+    function releaseWakeLock() {
+        if (wakeLock !== null) {
+            wakeLock.release()
+                .then(() => {
+                    wakeLock = null;
+                });
+        }
+    }
+    
+    // --- MAP DRAWING LOGIC (10M STEP SCALING & FIXED VIEW FOR SHORT PATHS) ---
+    function drawPath() {
+        if (!mapCtx || pathPoints.length < 1) {
+            clearCanvas();
+            return;
+        }
+
+        const W = mapCanvas.width;
+        const H = mapCanvas.height;
+        clearCanvas();
+
+        // 1. Tìm giới hạn (Bounding Box) của đường đi thực tế
+        let minLat = pathPoints[0].lat, maxLat = pathPoints[0].lat;
+        let minLon = pathPoints[0].lon, maxLon = pathPoints[0].lon;
+
+        for (const point of pathPoints) {
+            minLat = Math.min(minLat, point.lat);
+            maxLat = Math.max(maxLat, point.lat);
+            minLon = Math.min(minLon, point.lon);
+            maxLon = Math.max(maxLon, point.lon);
+        }
+
+        const latRange = maxLat - minLat;
+        const lonRange = maxLon - minLon;
+        
+        const maxPathRangeDegree = Math.max(latRange, lonRange);
+        
+        // 2. Chuyển phạm vi độ lớn nhất sang xấp xỉ mét 
+        const approxRangeMeters = maxPathRangeDegree * METERS_PER_DEGREE_LAT;
+        
+        let targetRangeMeters;
+        let centerLat, centerLon;
+        
+        if (approxRangeMeters < FIXED_VIEW_METERS) {
+            // Khi đường đi quá ngắn (< 30m), sử dụng khung cố định 30m, căn giữa điểm cuối
+            targetRangeMeters = FIXED_VIEW_METERS;
+            const lastPoint = pathPoints[pathPoints.length - 1];
+            centerLat = lastPoint.lat;
+            centerLon = lastPoint.lon;
+        } else {
+            // 3. Làm tròn lên bội số 10 mét gần nhất
+            targetRangeMeters = Math.ceil(approxRangeMeters / STEP_METERS) * STEP_METERS;
+            
+            // Tính tâm của đường đi thực tế
+            centerLat = minLat + latRange / 2;
+            centerLon = minLon + lonRange / 2;
+        }
+
+
+        // 4. Chuyển phạm vi mục tiêu (đã làm tròn/cố định) trở lại Độ (Degrees)
+        const targetRangeDegree = targetRangeMeters / METERS_PER_DEGREE_LAT;
+
+        // 5. Thiết lập Scale và Centering
+        
+        const usableDim = Math.min(W, H) - 2 * MAP_PADDING;
+        
+        // Tỷ lệ (Pixel / Độ)
+        const scale = usableDim / targetRangeDegree; 
+
+        // Tọa độ địa lý bắt đầu (min) cho khung vẽ (để căn giữa)
+        const drawMinLat = centerLat - targetRangeDegree / 2;
+        const drawMinLon = centerLon - targetRangeDegree / 2;
+        
+        // Độ dịch chuyển (pixel) để căn khung vẽ đã scale vào giữa Canvas
+        const offsetX = (W - (targetRangeDegree * scale)) / 2;
+        const offsetY = (H - (targetRangeDegree * scale)) / 2; 
+        
+        // Hàm chuyển Lat/Lon sang Pixel
+        const toPixel = (point) => {
+            let x = (point.lon - drawMinLon) * scale + offsetX;
+            let y = H - ((point.lat - drawMinLat) * scale + offsetY);
+
+            // Giới hạn trong phạm vi Canvas
+            x = Math.max(MAP_PADDING, Math.min(W - MAP_PADDING, x));
+            y = Math.max(MAP_PADDING, Math.min(H - MAP_PADDING, y));
+            return { x, y };
+        }
+
+        // 6. Bắt đầu vẽ đường đi
+        mapCtx.beginPath();
+        mapCtx.strokeStyle = '#047857'; // Màu xanh đậm
+        mapCtx.lineWidth = 4;
+        mapCtx.lineJoin = 'round';
+        mapCtx.lineCap = 'round';
+
+        pathPoints.forEach((point, index) => {
+            const { x, y } = toPixel(point);
+            
+            if (index === 0) {
+                mapCtx.moveTo(x, y); // Điểm bắt đầu
+            } else {
+                mapCtx.lineTo(x, y); // Vẽ đến điểm tiếp theo
+            }
+        });
+
+        if (pathPoints.length > 0) {
+            mapCtx.stroke(); // Đảm bảo đường được vẽ (nếu có > 1 điểm)
+        }
+        
+        // 7. Đánh dấu điểm bắt đầu và điểm kết thúc
+
+        // Điểm BẮT ĐẦU (Màu xanh lá cây)
+        if (pathPoints.length > 0) {
+            const startPoint = toPixel(pathPoints[0]);
+            mapCtx.fillStyle = '#10b981'; // Xanh lá cây
+            mapCtx.beginPath();
+            mapCtx.arc(startPoint.x, startPoint.y, 5, 0, Math.PI * 2, true); 
+            mapCtx.fill();
+        }
+
+        // Điểm HIỆN TẠI (Màu đỏ)
+        if (pathPoints.length > 0) {
+            const endPoint = toPixel(pathPoints[pathPoints.length - 1]);
+            mapCtx.fillStyle = '#ef4444'; // Màu đỏ
+            mapCtx.beginPath();
+            mapCtx.arc(endPoint.x, endPoint.y, 6, 0, Math.PI * 2, true); 
+            mapCtx.fill();
+        }
+    }
+
+
+    // --- GPS SUCCESS HANDLER ---
+    function successCallback(position) {
+        if (!isTracking) return;
+        
+        const currentTimestamp = Date.now();
+        const currentPosition = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+        };
+
+        const newPoint = { lat: currentPosition.latitude, lon: currentPosition.longitude };
+        
+        // Lấy điểm cuối cùng trong pathPoints (nếu có) để tính khoảng cách
+        const lastRecordedPoint = pathPoints.length > 0 ? pathPoints[pathPoints.length - 1] : null;
+
+        // Chỉ lưu điểm nếu:
+        // 1. Là điểm đầu tiên
+        // 2. Hoặc đã di chuyển ít nhất 1 mét kể từ điểm cuối cùng (lọc nhiễu)
+        if (lastRecordedPoint === null || calculateDistance(lastRecordedPoint, newPoint) > 1) {
+            pathPoints.push(newPoint);
+        }
+        
+        // Luôn vẽ lại bản đồ để cập nhật vị trí chấm đỏ và tỷ lệ scale
+        drawPath();
+
+
+        let distanceChange = 0;
+        let timeChangeSeconds = 0;
+        let currentSpeedKmh = 0.0;
+
+        // Xử lý khoảng cách và tốc độ
+        if (lastPosition && lastTimestamp) {
+            distanceChange = calculateDistance(lastPosition, currentPosition); // lastPosition ở đây là GPS raw {latitude, longitude}
+            const timeChangeMs = currentTimestamp - lastTimestamp;
+            timeChangeSeconds = timeChangeMs / 1000;
+
+            // Lọc nhiễu GPS: Chỉ cộng dồn nếu quãng đường là hợp lý (dưới 100m/lần cập nhật)
+            if (distanceChange > 0 && distanceChange < 100 && timeChangeSeconds > 0) {
+                totalDistance += distanceChange;
+                
+                // Tốc độ hiện tại (m/s) * 3.6 = (km/h)
+                const currentSpeedMps = distanceChange / timeChangeSeconds;
+                currentSpeedKmh = currentSpeedMps * 3.6;
+            }
+        }
+
+        // Cập nhật UI thời gian thực
+        updateDistanceDisplay();
+        
+        document.getElementById('speed-display').textContent = `${currentSpeedKmh.toFixed(1)} km/h`;
+        // Độ chính xác GPS (Cường độ sóng) tính bằng mét. Giá trị càng nhỏ càng tốt.
+        document.getElementById('accuracy-display').textContent = `${position.coords.accuracy.toFixed(1)} m`; 
+
+        updateStatus(`Đang chạy... Độ chính xác: ${position.coords.accuracy.toFixed(1)}m.`, 'bg-success-100 text-success-green');
+
+        // Cập nhật vị trí và thời gian cuối cùng
+        // LƯU VỊ TRÍ RAW (latitude, longitude) để tính toán khoảng cách lần tiếp theo
+        lastPosition = currentPosition;
+        lastTimestamp = currentTimestamp;
+
+        // Kiểm tra mục tiêu
+        checkGoal();
+    }
+
+    // --- GPS ERROR HANDLER ---
+    function errorCallback(error) {
+        console.error("GPS Error:", error);
+        let msg = "Lỗi GPS không xác định.";
+        switch(error.code) {
+            case error.PERMISSION_DENIED:
+                msg = "Bạn đã từ chối quyền truy cập vị trí. Vui lòng bật lại.";
+                break;
+            case error.POSITION_UNAVAILABLE:
+                msg = "Không thể xác định vị trí hiện tại (mất sóng GPS).";
+                break;
+            case error.TIMEOUT:
+                msg = "Yêu cầu định vị bị hết thời gian. Vui lòng di chuyển ra khu vực có tín hiệu GPS tốt hơn (ngoài trời, khu vực trống).";
+                break;
+        }
+        stopTracking(false);
+        openModal('modal-error', msg);
+    }
+
+    // --- GOAL CHECK ---
+    function checkGoal() {
+        if (isTracking && totalDistance >= targetDistance) {
+            // 1. DỪNG THEO DÕI
+            stopTracking(true); // Đánh dấu hoàn thành
+            
+            // 2. RUNG ĐIỆN THOẠI
+            if ('vibrate' in navigator) {
+                navigator.vibrate([1000, 500, 500, 500, 500]); 
+            }
+            
+            // 3. HIỂN THỊ MODAL
+            openModal('modal-success');
+            
+            updateStatus('Đã hoàn thành mục tiêu!', 'bg-success-green text-white');
+        }
+    }
+
+    // --- START TRACKING ---
+    function startTracking() {
+        const inputEl = document.getElementById('distance-input');
+        const distanceValue = parseFloat(inputEl.value);
+
+        if (isNaN(distanceValue) || distanceValue <= 0) {
+            openModal('modal-error', "Vui lòng nhập một quãng đường mục tiêu hợp lệ (lớn hơn 0 mét).");
+            return;
+        }
+
+        // Reset trạng thái
+        targetDistance = distanceValue;
+        totalDistance = 0; 
+        lastPosition = null; 
+        lastTimestamp = null;
+        startTime = Date.now();
+        pathPoints = []; // Xóa đường đi cũ
+        clearCanvas();
+
+        showFinalStats(false); // Ẩn thống kê cuối cùng nếu có
+
+        updateButtons(true);
+        updateDistanceDisplay();
+        document.getElementById('time-display').textContent = '00:00:00';
+        updateStatus('Đang yêu cầu truy cập vị trí và giữ màn hình...', 'bg-primary-blue text-white bg-primary-blue');
+
+        // Yêu cầu giữ màn hình luôn bật
+        requestWakeLock();
+        startTimer(); // Bắt đầu đồng hồ bấm giờ
+
+        // Cấu hình theo dõi GPS: 
+        const options = {
+            enableHighAccuracy: true, 
+            timeout: 5000, 
+            maximumAge: 0   
+        };
+
+        // Bắt đầu theo dõi vị trí liên tục
+        if ('geolocation' in navigator) {
+            watchId = navigator.geolocation.watchPosition(successCallback, errorCallback, options);
+        } else {
+            openModal('modal-error', "Trình duyệt của bạn không hỗ trợ định vị GPS.");
+            stopTracking(false);
+        }
+    }
+
+    // --- STOP TRACKING ---
+    function stopTracking(completedGoal) {
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+
+        stopTimer();
+        releaseWakeLock();
+        updateButtons(false);
+        
+        if (completedGoal) {
+            // Stats được hiển thị sau khi đóng modal thành công
+        } else {
+            // Nếu dừng thủ công, hiển thị stats ngay lập tức
+            showFinalStats(true); 
+            updateStatus('Đã dừng thủ công.', 'bg-yellow-100 text-yellow-800');
+        }
+    }
+
+    // Thiết lập sự kiện onload
+    window.onload = function() {
+        setupCanvas();
+        updateButtons(false);
+        // Xử lý khi màn hình thay đổi kích thước để canvas luôn vừa vặn
+        window.addEventListener('resize', setupCanvas); 
+    }
+</script>
+
+</body>
+</html>
+
